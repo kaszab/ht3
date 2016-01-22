@@ -184,7 +184,7 @@ def getdata_task(parameter):
                 g_thread_lock.release()
 
 
-    ### Heizgeraet ##            
+    ### Heizgeraet / heaters  ##
     def HeizgeraetMsg():
         global g_heizgeraet_i_vorlauf_soll
         global g_heizgeraet_f_vorlauf_ist
@@ -204,7 +204,8 @@ def getdata_task(parameter):
             g_heizgeraet_i_vorlauf_soll =int(buffer[4])
             g_heizgeraet_f_vorlauf_ist  =float(buffer[5]*256+ buffer[6])/10
             g_heizgeraet_i_leistung     =int(buffer[8])
-            # Kesselbetriebsart Heizen:=0x5x, Warmwasser:=0x6x
+            # Kesselbetriebsart Heat:=0x5x, Warmwasser:=0x6x
+            # boiler heating mode: = 0x5x, hot water: = 0x6x
             if (buffer[7] & 0x50) == 0x50:
                 g_heizgeraet_i_betriebsmodus =1
             else:
@@ -224,6 +225,18 @@ def getdata_task(parameter):
             #   Bit3: waehrend Verbrennung 1 mit etwas laengerem Vor- und Nachlauf vgl. Bit8
             #   Bit2: immer 0
             #   Bit1: waehrend Verbrennung 1 mit kurzem Vor- und Nachlauf
+
+            # Extract bitfield
+            #
+            # Bit field: Bit 7 & 8 only for hot water; (Bits counted from right - starts 1)
+            # Bit8: circulation pump hot water
+            # Bit7: storage tank loading pump hot water
+            # Bit6: always 1
+            # Bit5: always 0
+            # Bit4: ignition of the burner
+            # Bit3: during combustion 1 with a slightly longer pre- and post cf. Bit8.
+            # Bit2: always 0
+            # Bit1: during combustion 1 with a short lead and lag
 
             g_heizgeraet_b_brenner       = int(buffer[11] & 0x01)
             g_heizgeraet_b_heizungspumpe = int(buffer[11] & 0x20)
@@ -245,7 +258,7 @@ def getdata_task(parameter):
                 g_thread_lock.release()
 
 
-    ### Heizkreismessage1 ##            
+    ### Heizkreismessage1 heating Message1  ##
     def HeizkreisMsg():
         global g_heizkreis_f_Aussen
         global g_heizkreis_i_betriebtotal_minuten
@@ -280,7 +293,7 @@ def getdata_task(parameter):
                 g_thread_lock.release()
  
             
-    ### Heizkreismessage2 ##            
+    ### Heizkreismessage2 heating Message2  ##
     def HeizkreisMsg_FW100_200Msg():
         global g_heizkreis_f_Soll_HK1
         global g_heizkreis_f_Ist_HK1
@@ -364,7 +377,7 @@ def getdata_task(parameter):
         crc_testen(laenge-2)
         if crc_test == True:
             if buffer[5] == 3:
-                # Solarkreis1
+                # solar circuit1
                 if buffer[10] != 255:
                     g_solar_f_kollektor     =float(buffer[10]*256+ buffer[11])/10
                     g_solar_f_speicherunten =float(buffer[12]*256+ buffer[13])/10
@@ -375,9 +388,11 @@ def getdata_task(parameter):
                 g_solar_b_pumpe = (buffer[14] & 0x01)
 
             # Auswertung der Solarertrag letze Stunde Bytes: 8-9
+            # Evaluation of the solar yield last hour Bytes: 8-9
             g_solar_i_ertrag_letztestunde =int(buffer[8]*256+ buffer[9])
 
             # Auswertung der Solarlaufzeiten
+            # Evaluation of Solar maturities
             g_solar_i_laufzeit_minuten =int(buffer[17]*256+buffer[18])
             g_solar_i_laufzeit_stunden =int(g_solar_i_laufzeit_minuten/60)
 
@@ -395,13 +410,14 @@ def getdata_task(parameter):
                 g_i_hexheader_counter+=1
                 g_thread_lock.release()
 
-    ### Requestmessage ##            
+    ### Requestmessage/Request Message
     def RequestMsg():
         for x in range (4,21):
             buffer[x] = ord(port.read())
         crc_testen(19)
         if crc_test == True:
             # TBD, noch nicht ausgewertet
+            # TBD, not yet evaluated
             
             if g_current_display=="system":
                 temptext="RQ:"
@@ -424,33 +440,40 @@ def getdata_task(parameter):
                 buffer[x] = ord(port.read())
             if buffer[1] == 0:
                 ## Telegram: Heizgeraet (88001800) ##
+                ## Telegram: heater (88001800) ##
                 if buffer[2] == 0x18:
                     if buffer[3] == 0:
                         HeizgeraetMsg()
                 ## Telegram: Heizkreis1 (88001900) ##
+                ## Telegram: Heating circuit 1 (88001900)
                 elif buffer[2] == 0x19:
                     if buffer[3] == 0:
                         HeizkreisMsg()
                 ## Telegram: Warmwasser (88003400) ##
+                ## Telegram: hot water (88003400) ##
                 elif buffer[2] == 0x34:
                     if buffer[3] == 0:
                         WarmwasserMsg()
                 ## Telegram: Request    (88000700) ##
+                ## Telegram: Request (88000700) ##
                 elif buffer[2] == 0x07:
                     if buffer[3] == 0:
                         RequestMsg()
 
         ## Telegram: HK2 / Datum ##
+        ## Telegram: HK2 / Date ##
         if firstbyte == 0x90:
             buffer[0] = firstbyte
             for x in range (1,4):
                 buffer[x] = ord(port.read())
             if buffer[1] == 0:
                 ## Telegram: Heizkreis2 (9000FF00) ##
+                ## Telegram: heating circuit 2 (9000FF00) ##
                 if buffer[2] == 0xff:
                     if buffer[3] == 0:
                         HeizkreisMsg_FW100_200Msg()
                 ## Telegram: Datum / Uhrzeit (90000600) ##
+                ## Telegram: Date / Time (90000600) ##
                 elif buffer[2] == 6:
                     if buffer[3] == 0:
                         DatumUhrzeitMsg()
@@ -494,9 +517,9 @@ def ende():
 
 def Lokalezeit():
     text.insert("end", "                                 \n","u")
-    text.insert("end", "Aktuelles Datum / Zeit           \n","u")
-    datum='        Datum: ' + time.strftime("%d:%m:%Y")+'\n'
-    zeit ='        Zeit : ' + time.strftime("%H:%M:%S")+'\n'
+    text.insert("end", "Current Date / Time           \n","u")
+    datum='        data: ' + time.strftime("%d:%m:%Y")+'\n'
+    zeit ='        time: ' + time.strftime("%H:%M:%S")+'\n'
     text.insert("end", datum)
     text.insert("end", zeit)
 
@@ -518,9 +541,9 @@ def System():
 
 def Info():
     text.insert("end", "System-Infos                     \n","b_gray")
-    datum=' System-Datum: ' + g_info_datum+'\n'
+    datum=' System-Date: ' + g_info_datum+'\n'
     text.insert("end", datum)
-    uhrzeit=' System-Zeit : ' + g_info_zeit+'\n'
+    uhrzeit=' System-Time : ' + g_info_zeit+'\n'
     text.insert("end", uhrzeit)
 
 def Heizgeraet_button():
@@ -531,57 +554,57 @@ def Heizgeraet_button():
     Heizgeraet()
 
 def Heizgeraet():
-    text.insert("end", "Heizgeraet                       \n","b_or")
-    temptext=" T-Vorlauf Soll       : "+format(g_heizgeraet_i_vorlauf_soll,"2d")+'   Grad\n'
+    text.insert("end", "Heater                       \n","b_or")
+    temptext=" T-Flow set           : "+format(g_heizgeraet_i_vorlauf_soll,"2d")+'   degree\n'
     text.insert("end",temptext)
-    temptext=" T-Vorlauf ist        : "+format(g_heizgeraet_f_vorlauf_ist,".1f")+' Grad\n'
+    temptext=" T-Flow is            : "+format(g_heizgeraet_f_vorlauf_ist,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" T-Ruecklauf          : "+format(g_heizgeraet_f_ruecklauf,".1f")+' Grad\n'
+    temptext=" T-return             : "+format(g_heizgeraet_f_ruecklauf,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" T-Mischer            : "+format(g_heizgeraet_f_mischer,".1f")+' Grad\n'
+    temptext=" T-Mixers             : "+format(g_heizgeraet_f_mischer,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" Betriebsmodus        : "+GetStrBetriebsmodus(g_heizgeraet_i_betriebsmodus)+' (Heizen/Warmwasser)\n'
+    temptext=" operation mode       : "+GetStrBetriebsmodus(g_heizgeraet_i_betriebsmodus)+' (heating/hotwater)\n'
     text.insert("end",temptext)
-    temptext=" Brenner              : "+GetStrOnOff(g_heizgeraet_b_brenner)+'\n'
+    temptext=" burner               : "+GetStrOnOff(g_heizgeraet_b_brenner)+'\n'
     text.insert("end",temptext)
-    temptext=" Leistung             : "+format(g_heizgeraet_i_leistung,"d")+'    %\n'
+    temptext=" power                : "+format(g_heizgeraet_i_leistung,"d")+'    %\n'
     text.insert("end",temptext)
-    temptext=" Heizubgspumpe        : "+GetStrOnOff(g_heizgeraet_b_heizungspumpe)+'\n'
+    temptext=" heat pump            : "+GetStrOnOff(g_heizgeraet_b_heizungspumpe)+'\n'
     text.insert("end",temptext)
-    temptext=" Zirkulationspumpe    : "+GetStrOnOff(g_heizgeraet_b_zirkulationspumpe)+'\n'
+    temptext=" circulation pump     : "+GetStrOnOff(g_heizgeraet_b_zirkulationspumpe)+'\n'
     text.insert("end",temptext)
-    temptext=" Speicherladepumpe    : "+GetStrOnOff(g_heizgeraet_b_speicherladepumpe)+'\n'
+    temptext=" Cylinder primary pump: "+GetStrOnOff(g_heizgeraet_b_speicherladepumpe)+'\n'
     text.insert("end",temptext)
     
     if g_current_display=="heizgeraet":
         text.insert("end","\n")
-        text.insert("end","Byte-Nr  Wert(hex)      Bedeutung         \n","b_gray")
-        text.insert("end"," 00-03   88 00 18 00    Telegram-Kennung \n")
-        text.insert("end"," 04      xy             T-Vorlauf Soll \n")
-        text.insert("end"," 05      Hi-Byte        T-Vorlauf Ist\n")
-        text.insert("end"," 06      Lo-Byte        T-Vorlauf Ist\n")
-        text.insert("end"," 07      5x/<>5x        Betriebsmodus: Heizen/Warmwasser\n")
+        text.insert("end","Byte-Nr  value(hex)      importance         \n","b_gray")
+        text.insert("end"," 00-03   88 00 18 00    Identifier \n")
+        text.insert("end"," 04      xy             T-Flow target \n")
+        text.insert("end"," 05      Hi-Byte        T-Flow Ist\n")
+        text.insert("end"," 06      Lo-Byte        T-Flow Ist\n")
+        text.insert("end"," 07      5x/<>5x        operation mode: Heat/Hot Water\n")
         text.insert("end"," 08      xy             Brennerleistung\n")
         text.insert("end"," 09      01/09          ? \n")
         text.insert("end"," 10      xy             ? \n")
         text.insert("end"," 11      Bitfeld        87654321 BitNr\n")
-        text.insert("end","                        8          Zirkulationspumpe WW\n")
-        text.insert("end","                         7         Speicherladepumpe WW\n")
-        text.insert("end","                          6        Heizungspumpe\n")
-        text.insert("end","                           5       Immer 0 ?\n")
-        text.insert("end","                            4      Zuendung des Brenner\n")
-        text.insert("end","                             3     Brenner an mit Vor-Nachlauf\n")
-        text.insert("end","                              2    Immer 0 ?\n")
-        text.insert("end","                               1   Brenner an mit Vor-Nachlauf\n")
+        text.insert("end","                        8          circulation pump WW\n")
+        text.insert("end","                         7         Cylinder primary pump WW\n")
+        text.insert("end","                          6        heat pump\n")
+        text.insert("end","                           5       always 0 ?\n")
+        text.insert("end","                            4      Ignition of the burner\n")
+        text.insert("end","                             3     Burner with pre-caster\n")
+        text.insert("end","                              2    always 0 ?\n")
+        text.insert("end","                               1   Burner with pre-caster\n")
         
         text.insert("end"," 12      c0             ?\n")
-        text.insert("end"," 13      Hi-Byte        T-Mischer\n")
-        text.insert("end"," 14      Lo-Byte        T-Mischer\n")
+        text.insert("end"," 13      Hi-Byte        T-Mixer\n")
+        text.insert("end"," 14      Lo-Byte        T-Mixer\n")
         text.insert("end"," 15-16   80/00          ?\n")
-        text.insert("end"," 17      Hi-Byte        T-Ruecklauf\n")
-        text.insert("end"," 18      Lo-Byte        T-Ruecklauf\n")
+        text.insert("end"," 17      Hi-Byte        T-reverse running\n")
+        text.insert("end"," 18      Lo-Byte        T-reverse running\n")
         text.insert("end"," 19-28   xy             ?\n")
-        text.insert("end"," 29      xy             CRC Wert\n")
+        text.insert("end"," 29      xy             CRC value\n")
 
 
 def Heizkreis_button():
@@ -592,52 +615,52 @@ def Heizkreis_button():
     Heizkreis()
 
 def Heizkreis():
-    text.insert("end", "Heizkreis                        \n","b_mocca")
-    temptext=" T-Aussen             : "+format(g_heizkreis_f_Aussen,".1f")+' Grad\n'
+    text.insert("end", "heating circuit                        \n","b_mocca")
+    temptext=" T-outside            : "+format(g_heizkreis_f_Aussen,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" T-Soll Heizkreis 1   : "+format(g_heizkreis_f_Soll_HK1,".1f")+' Grad\n'
+    temptext=" T-Should heating circuit 1   : "+format(g_heizkreis_f_Soll_HK1,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" T-Ist  Heizkreis 1   : "+format(g_heizkreis_f_Ist_HK1,".1f")+' Grad\n'
+    temptext=" T-Is heating circuit 1   : "+format(g_heizkreis_f_Ist_HK1,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" T-Steuer Fernbedien. : "+format(g_heizkreis_f_Steuer_FB,".1f")+' Grad\n'
+    temptext=" T-Control remote control. : "+format(g_heizkreis_f_Steuer_FB,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" Betrieb Total        : "+format(g_heizkreis_i_betriebtotal_minuten,"d")+' Minuten := '+ \
-                  format(g_heizkreis_i_betriebtotal_minuten/60,".0f")+' Stunden\n'
+    temptext=" Total operating        : "+format(g_heizkreis_i_betriebtotal_minuten,"d")+' minutes := '+ \
+                  format(g_heizkreis_i_betriebtotal_minuten/60,".0f")+' hours\n'
     text.insert("end",temptext)
-    temptext=" Betrieb Heizung      : "+format(g_heizkreis_i_betriebheizung_minuten,"d")+' Minuten := '+ \
-                  format(g_heizkreis_i_betriebheizung_minuten/60,".0f")+' Stunden\n'
+    temptext=" Heating operation      : "+format(g_heizkreis_i_betriebheizung_minuten,"d")+' minutes := '+ \
+                  format(g_heizkreis_i_betriebheizung_minuten/60,".0f")+' hours\n'
     text.insert("end",temptext)
-    temptext=" Brenner Ein Counter  : "+format(g_heizkreis_i_brenner_ein_counter,"d")+'\n'
+    temptext=" Burner On Counter  : "+format(g_heizkreis_i_brenner_ein_counter,"d")+'\n'
     text.insert("end",temptext)
-    temptext=" Betriebsart          : "+GetStrBetriebsart(g_heizkreis_i_betriebsart)+' (Heizen/Sparen/Frost)\n'
+    temptext=" operating mode     : "+GetStrBetriebsart(g_heizkreis_i_betriebsart)+' (Heat/Save up/Frost)\n'
     text.insert("end",temptext)
     
     if g_current_display=="heizkreis":
         text.insert("end","\n")
-        text.insert("end","Byte-Nr  Wert(hex)      Bedeutung         \n","b_gray")
-        text.insert("end"," 00-03   88 00 19 00    Telegram-Kennung \n")
-        text.insert("end"," 04      Hi-Byte        T-Aussen\n")
-        text.insert("end"," 05      Lo-Byte        T-Aussen\n")
+        text.insert("end","Byte-Nr  value(hex)      Meaning         \n","b_gray")
+        text.insert("end"," 00-03   88 00 19 00    Identifier \n")
+        text.insert("end"," 04      Hi-Byte        T-Outside\n")
+        text.insert("end"," 05      Lo-Byte        T-Outside\n")
         text.insert("end"," 06-16   xy             ?\n")
-        text.insert("end"," 17-19   B3 B2 B1       Betrieb Total   (Minuten)\n")
+        text.insert("end"," 17-19   B3 B2 B1       operating Total   (minutes)\n")
         text.insert("end"," 20-22   xy             ?\n")
-        text.insert("end"," 23-25   B3 B2 B1       Betrieb Heizung (Minuten) \n")
+        text.insert("end"," 23-25   B3 B2 B1       operating heater (minutes) \n")
         text.insert("end"," 26-30   xy             ?\n")
         text.insert("end"," 31      xy             CRC\n")
 
         text.insert("end","\n")
-        text.insert("end","Byte-Nr  Wert(hex)      Bedeutung         \n","b_gray")
-        text.insert("end"," 00-03   90 00 ff 00    Telegram-Kennung \n")
+        text.insert("end","Byte-Nr  value(hex)      Meaning         \n","b_gray")
+        text.insert("end"," 00-03   90 00 ff 00    Identifier \n")
         text.insert("end"," 04      xy             ?\n")
-        text.insert("end"," 05      6f/70/?        Heizkreis 1/2 ?\n")
-        text.insert("end"," 06      01/02/03       Betriebsart (Frost/Sparen/Heizen)\n")
+        text.insert("end"," 05      6f/70/?        heating circuit 1/2 ?\n")
+        text.insert("end"," 06      01/02/03       Operating mode (Frost/Save up/Heat)\n")
         text.insert("end"," 07      xy             ?\n")
-        text.insert("end"," 08      Hi-Byte        T-Soll Heizkreis 1\n")
-        text.insert("end"," 09      Lo-Byte        T-Soll Heizkreis 1\n")
-        text.insert("end"," 10      Hi-Byte        T-Ist  Heizkreis 1\n")
-        text.insert("end"," 11      Lo-Byte        T-Ist  Heizkreis 1\n")
-        text.insert("end"," 12      Hi-Byte        T-Fernbedienung\n")
-        text.insert("end"," 13      Lo-Byte        T-Fernbedienung\n")
+        text.insert("end"," 08      Hi-Byte        T-target heating circuit 1\n")
+        text.insert("end"," 09      Lo-Byte        T-target heating circuit 1\n")
+        text.insert("end"," 10      Hi-Byte        T-Ist  heating circuit 1\n")
+        text.insert("end"," 11      Lo-Byte        T-Ist  heating circuit 1\n")
+        text.insert("end"," 12      Hi-Byte        T-remote\n")
+        text.insert("end"," 13      Lo-Byte        T-remote\n")
         text.insert("end"," 14      xy             ?\n")
         text.insert("end"," 15      xy             CRC\n")
 
@@ -649,28 +672,28 @@ def Warmwasser_button():
     Warmwasser()
 
 def Warmwasser():
-    text.insert("end", "Warmwasser                       \n","b_bl")
-    temptext=" T-Soll               : "+format(g_warmwasser_i_Soll,"2d")+'   Grad\n'
+    text.insert("end", "Hot Water                       \n","b_bl")
+    temptext=" T-target               : "+format(g_warmwasser_i_Soll,"2d")+'   degree\n'
     text.insert("end",temptext)
-    temptext=" T-Ist (Mischer)      : "+format(g_warmwasser_f_Ist,".1f")+' Grad\n'
+    temptext=" T-is (mixer)      : "+format(g_warmwasser_f_Ist,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" T-Speicher           : "+format(g_warmwasser_f_Speicheroben,".1f")+' Grad\n'
+    temptext=" T-tank           : "+format(g_warmwasser_f_Speicheroben,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" Betriebszeit         : "+format(g_warmwasser_i_betriebszeit,"d")+' Minuten := '+ \
-                  format(g_warmwasser_i_betriebszeit/60,".0f")+' Stunden\n'
+    temptext=" uptime         : "+format(g_warmwasser_i_betriebszeit,"d")+' minutes := '+ \
+                  format(g_warmwasser_i_betriebszeit/60,".0f")+' hours\n'
     text.insert("end",temptext)
     
     if g_current_display=="warmwasser":
         text.insert("end","\n")
-        text.insert("end","Byte-Nr  Wert(hex)      Bedeutung         \n","b_gray")
-        text.insert("end"," 00-03   88 00 34 00    Telegram-Kennung \n")
-        text.insert("end"," 04      xy             T-Soll\n")
-        text.insert("end"," 05      Hi-Byte        T-Ist (Mischer)\n")
-        text.insert("end"," 06      Lo-Byte        T-Ist (Mischer)\n")
-        text.insert("end"," 07      Hi-Byte        T-Speicher\n")
-        text.insert("end"," 08      Lo-Byte        T-Speicher\n")
+        text.insert("end","Byte-Nr  value(hex)      Meaning         \n","b_gray")
+        text.insert("end"," 00-03   88 00 34 00    Identifier \n")
+        text.insert("end"," 04      xy             T-target\n")
+        text.insert("end"," 05      Hi-Byte        T-Is (Mixer)\n")
+        text.insert("end"," 06      Lo-Byte        T-Is (Mixer)\n")
+        text.insert("end"," 07      Hi-Byte        T-tank\n")
+        text.insert("end"," 08      Lo-Byte        T-tank\n")
         text.insert("end"," 09-13   xy             ?\n")
-        text.insert("end"," 14-16   B3 B2 B1       Betriebszeit (Minuten)\n")
+        text.insert("end"," 14-16   B3 B2 B1       uptime (minutes)\n")
         text.insert("end"," 17-20   xy             ?\n")
         text.insert("end"," 21      xy             CRC\n")
 
@@ -683,37 +706,37 @@ def Solar_button():
 
 def Solar():
     text.insert("end", "Solar                            \n","b_gr")
-    temptext=" T-Kollektor          : "+format(g_solar_f_kollektor,".1f")+' Grad\n'
+    temptext=" T-collector          : "+format(g_solar_f_kollektor,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" T-Speicher unten     : "+format(g_solar_f_speicherunten,".1f")+' Grad\n'
+    temptext=" T-tank below     : "+format(g_solar_f_speicherunten,".1f")+' degree\n'
     text.insert("end",temptext)
-    temptext=" Ertrag letzte Stunde : "+format(g_solar_i_ertrag_letztestunde,"d")+'\n'
+    temptext=" Income last hour : "+format(g_solar_i_ertrag_letztestunde,"d")+'\n'
     text.insert("end",temptext)
     g_solar_i_laufzeit_stunden=g_solar_i_laufzeit_minuten / 60
-    temptext=" Laufzeit             : "+format(g_solar_i_laufzeit_minuten,"d")+' Minuten := '+ \
-                  format(g_solar_i_laufzeit_stunden,".0f")+' Stunden\n'
+    temptext=" run-time             : "+format(g_solar_i_laufzeit_minuten,"d")+' minutes := '+ \
+                  format(g_solar_i_laufzeit_stunden,".0f")+' hours\n'
     text.insert("end",temptext)
-    temptext=" Solarpumpe           : "+GetStrOnOff(g_solar_b_pumpe)+'\n'
+    temptext=" Solar pump           : "+GetStrOnOff(g_solar_b_pumpe)+'\n'
     text.insert("end",temptext)
 
     if g_current_display=="solar":
         text.insert("end","\n")
-        text.insert("end","Byte-Nr  Wert(hex)      Bedeutung \n","b_gray")
-        text.insert("end"," 00-03   b0 00 ff 00    Telegram-Kennung \n")
+        text.insert("end","Byte-Nr  value(hex)      Meaning \n","b_gray")
+        text.insert("end"," 00-03   b0 00 ff 00    Identifier \n")
         text.insert("end"," 04      00             ? \n")
-        text.insert("end"," 05      03             ? Solarkreis\n")
+        text.insert("end"," 05      03             ? solar circuit\n")
         text.insert("end"," 06,07   Bitfeld        ? \n")
-        text.insert("end"," 08      Hi-Byte        Ertrag letzte Stunde \n")
-        text.insert("end"," 09      Lo-Byte        Ertrag letzte Stunde\n")
-        text.insert("end"," 10      Hi-Byte        T-Kollektor      \n")
-        text.insert("end"," 11      Lo-Byte        T-Kollektor      \n")
-        text.insert("end"," 12      Hi-Byte        T-Speicher unten \n")
-        text.insert("end"," 13      Lo-Byte        T-Speicher unten \n")
-        text.insert("end"," 14      Bitfeld        Solarpumpe 00/01:=aus/ein\n")
+        text.insert("end"," 08      Hi-Byte        Income last hour \n")
+        text.insert("end"," 09      Lo-Byte        Income last hour\n")
+        text.insert("end"," 10      Hi-Byte        T-collector      \n")
+        text.insert("end"," 11      Lo-Byte        T-collector      \n")
+        text.insert("end"," 12      Hi-Byte        T-tank below \n")
+        text.insert("end"," 13      Lo-Byte        T-tank below \n")
+        text.insert("end"," 14      Bitfeld        Solar pump 00/01:=from/to\n")
         text.insert("end"," 15-16   00/00          ?\n")
-        text.insert("end"," 17      Hi-Byte        Laufzeit Solarpumpe (Minuten)\n")
-        text.insert("end"," 18      Lo-Byte        Laufzeit Solarpumpe (Minuten)\n")
-        text.insert("end"," 19      xy             CRC Wert\n")
+        text.insert("end"," 17      Hi-Byte        run-time Solar pump (minutes)\n")
+        text.insert("end"," 18      Lo-Byte        run-time Solar pump (minutes)\n")
+        text.insert("end"," 19      xy             CRC value\n")
 
 
 def clear():
@@ -728,14 +751,14 @@ def hexclear():
 
 def GetStrOnOff(bitvalue):
         if bitvalue == 0:
-            return "Aus"
-        else: return "An"
+            return "From"
+        else: return "To"
 
 def GetStrBetriebsmodus(ivalue):
         if ivalue == 1:
-            return "Heizen"
+            return "Heat"
         elif  ivalue == 0:
-            return "Warmwasser"
+            return "Hot Water"
         else:
             return "--"
 
@@ -743,9 +766,9 @@ def GetStrBetriebsart(ivalue):
         if ivalue == 1:
             return "Frost"
         elif ivalue == 2:
-            return "Sparen"
+            return "Save up"
         elif ivalue == 3:
-            return "Heizen"
+            return "Heat"
         else:
             return "---"
 
@@ -794,13 +817,13 @@ def openport():
     try:
         port = serial.Serial("/dev/ttyUSB0", 9600 )
     except:
-        antwort = tkinter.messagebox.askokcancel("Fehler","Keine Verbindung mit USB-Port \
-                     Versuch mit COM-Port ?")
+        antwort = tkinter.messagebox.askokcancel("Error","No connection with USB port \
+                     Experiment with COM port ?")
         if antwort == 1:
             try:
                 port = serial.Serial("/dev/ttyAMA0", 9600 )
             except:
-                tkinter.messagebox.showerror("Fehler","Keine Verbindung mit COM-Port möglich!")
+                tkinter.messagebox.showerror("Error","No connection with COM port available!")
                 ende()
         else:
             ende()
@@ -823,16 +846,16 @@ fr3.pack(side="right")
 
 bhexdclear = tkinter.Button(fr2, text="Hexdump clear", command = hexclear)
 bhexdclear.pack(padx=5, pady=5, side="left")
-bende = tkinter.Button(fr2, text = "Ende", command = ende)
+bende = tkinter.Button(fr2, text = "Quit", command = ende)
 bende.pack(padx=5, pady=5, side="right")
 
 bsys = tkinter.Button(fr3, text="System", command = system_button)
 bsys.pack(padx=5, pady=5, side="left")
-bhge = tkinter.Button(fr3, text="Heizgeraet", command = Heizgeraet_button)
+bhge = tkinter.Button(fr3, text="Heater", command = Heizgeraet_button)
 bhge.pack(padx=5, pady=5, side="left")
-bhkr = tkinter.Button(fr3, text="Heizkreis", command = Heizkreis_button)
+bhkr = tkinter.Button(fr3, text="Heating circuit", command = Heizkreis_button)
 bhkr.pack(padx=5, pady=5, side="left")
-bwwa = tkinter.Button(fr3, text="Warmwasser", command = Warmwasser_button)
+bwwa = tkinter.Button(fr3, text="Hot water", command = Warmwasser_button)
 bwwa.pack(padx=5, pady=5, side="left")
 bsola = tkinter.Button(fr3, text="Solar", command = Solar_button)
 bsola.pack(padx=5, pady=5, side="left")
