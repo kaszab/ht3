@@ -1,3 +1,4 @@
+
 --[[ protocol description:
 -- heater hdr		0x88 00 18 00 msg len 31
 -- Heating circuit 1	0x88 00 19 00 msg len 33
@@ -7,14 +8,13 @@
 -- date			0x90 00 06 00 msg len 14
 -- solar		0xB0 00 FF 00 msg len 21
 --]]
-
 crc_table = {
 	0x00, 0x02 ,0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12,
-	0x14, 0x16, 0x18, 0x1A, 0x1C, 0x1E, 0x20, 0x22, 0x24, 0x26, 
+	0x14, 0x16, 0x18, 0x1A, 0x1C, 0x1E, 0x20, 0x22, 0x24, 0x26,
 	0x28, 0x2A, 0x2C, 0x2E, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3A,
 	0x3C, 0x3E, 0x40, 0x42, 0x44, 0x46, 0x48, 0x4A, 0x4C, 0x4E,
 	0x50, 0x52, 0x54, 0x56, 0x58, 0x5A, 0x5C, 0x5E, 0x60, 0x62,
-	0x64, 0x66, 0x68, 0x6A, 0x6C, 0x6E, 0x70, 0x72, 0x74, 0x76, 
+	0x64, 0x66, 0x68, 0x6A, 0x6C, 0x6E, 0x70, 0x72, 0x74, 0x76,
 	0x78, 0x7A, 0x7C, 0x7E, 0x80, 0x82, 0x84, 0x86, 0x88, 0x8A,
 	0x8C, 0x8E, 0x90, 0x92, 0x94, 0x96, 0x98, 0x9A,	0x9C, 0x9E,
 	0xA0, 0xA2, 0xA4, 0xA6, 0xA8, 0xAA, 0xAC, 0xAE, 0xB0, 0xB2,
@@ -60,20 +60,87 @@ local function crc_test(len)
 end
 
 local function heater_msg(crc_len)
-	print("heater msg received")
-	dumpmsg()
+	print("heater msg:")
+	-- dumpmsg()
 	if not crc_test(crc_len) then
 		print("CRC - FAIL")
 	end
+
+	--[[
+	1-4 88 00 18 00	- HDR
+	  5 00		- requested temp
+	6-7 01 14	- current temp
+	  8 4c		- operating mode
+	  9 00		- power
+	 10 00		- flame
+	 11 26		-
+	 12 20		- pump
+	 13 c0		- ???
+	01 5b		- mixer temp
+	80 00		- heater type
+	80 00		- countercurrent
+	ff ff ff 00 00 00 00 00 00 00 24 00
+	]]
+
+	local requested_t	= msg[5]
+	local current_t		= (msg[6] * 256 + msg[7])/10
+	-- neaisku kuris, reiktu debuginti
+	--local operating_mode	= msg[8] & 0x50 == 0x50 and "heating" or "hot water"
+	local operating_mode	= msg[10] & 0x03
+	local power		= msg[9]
+	local mixer_t		= (msg[14]*256+ msg[15])/10
+	local countercurrent_t	= (msg[18]*256+ msg[19])/10
+	local flame_on		= (msg[10] & 0x08) ~= 0
+	local burner		= (msg[12] & 0x1) ~= 0
+	local heat_pump		= (msg[12] & 0x20) ~= 0
+	local primary_pump	= (msg[12] & 0x40) ~= 0
+	local circulation_pump	= (msg[12] & 0x80) ~= 0
+
+
+	print(string.format("requested temp: %d", requested_t))
+	print(string.format("current temp:   %f", current_t))
+	print(string.format("power:          %d%%", power))
+	print(string.format("operating mode: %d", operating_mode))
+	print(string.format("mixer temp:     %f", mixer_t))
+	print(string.format("countercurrent: %f", countercurrent_t))
+	print(string.format("flame:          %s", tostring(flame_on)))
+	print(string.format("burner:         %s", tostring(burner)))
+	print(string.format("heat pump:      %s", tostring(heat_pump)))
+	print(string.format("primary pump    %s", tostring(primary_pump)))
+	print(string.format("circulation pump:%s", tostring(circulation_pump)))
+
+
 	msg = {}
 end
 
 local function heating_circuit1_msg(crc_len)
 	print("heating circuit 1 msg received")
-	dumpmsg()
+	--dumpmsg()
 	if not crc_test(crc_len) then
 		print("CRC - FAIL")
 	end
+
+	--88 00 19 00
+	--00 3b -outside temp
+	--80 00 80 00 ff ff 00 64 03 54 0f 02 28 88 00 00 00 01 dc 32 03 1f ab 80 00 5d 00
+
+	local outside_t = 0
+	if msg[5] ~= 0xff then
+		outside_t = (msg[5]*256+msg[6])/10
+	else
+		outside_t = (255-msg[6])/-10
+	end
+	local working_time_in_min  = msg[18]*65536+ msg[19]*256+ msg[20]
+	local heating_time_in_min  = msg[24]*65536+ msg[25]*256+ msg[26]
+	local burner_counter       = msg[15]*65536+ msg[16]*256+ msg[17]
+
+
+
+	print(string.format("outside temp: %f", outside_t))
+	print(string.format("working time: %d min", working_time_in_min))
+	print(string.format("heating time: %d min", heating_time_in_min))
+	print(string.format("burner counter: %d min", burner_counter))
+
 	msg = {}
 end
 
@@ -83,6 +150,17 @@ local function hot_water_msg(crc_len)
 	if not crc_test(crc_len) then
 		print("CRC - FAIL")
 	end
+
+	local required_t = msg[5]
+	local current_t	= (msg[6]*256 + msg[7])/10
+	local storage_t	= (msg[8]*256 + msg[9])/10
+	local uptime	= (msg[15]*65536 + msg[16]*256 + msg[17])
+
+	print(string.format("required temp: %d", required_t))
+	print(string.format("current  temp: %f", current_t))
+	print(string.format("strorage  temp: %f", storage_t))
+	print(string.format("uptime  : %d", uptime))
+
 	msg = {}
 end
 
@@ -101,15 +179,46 @@ local function heating_circuit2_msg(crc_len)
 	if not crc_test(crc_len) then
 		print("CRC - FAIL")
 	end
+
+	--90 00 ff 00
+	--00 6f
+	--03 - operating mode
+	--01 00 d2 00 ef f3 34 00 4c 00
+	local operating_mode = msg[7]
+	print(string.format("operating mode		%d", operating_mode))
+	if msg[6] == 0x6f then
+		local required  = (msg[9]*256 + msg[10])/10
+		local curent    = (msg[11]*256 + msg[12])/10
+		local duty      = (msg[13]*256 + msg[14])/10
+
+		print(string.format("requested		%f", required))
+		print(string.format("current		%f", curent))
+		print(string.format("duty		%f", duty))
+	end
+
+
+
 	msg = {}
 end
 
 local function date_msg(crc_len)
-	print("date msg received")
-	dumpmsg()
+	--print("date msg received")
+	--dumpmsg()
 	if not crc_test(crc_len) then
 		print("CRC - FAIL")
 	end
+
+	local year	= msg[5] + 2000
+	local mounth	= msg[6]
+	local day	= msg[7]
+	local hour	= msg[8]
+	local minute	= msg[9]
+	local second	= msg[10]
+	local dayofweek = msg[11]
+
+	print(string.format("date: %d-%02d-%02d %02d:%02d:%02d (day of week: %d)",
+		     year, mounth, hour, day, minute, second, dayofweek))
+
 	msg = {}
 end
 
@@ -158,7 +267,7 @@ end
 
 function get_byte(data)
 	byte = string.byte(data)
-	
+
 	-- print(string.format("gautas %02x #msg %d", byte, #msg))
 	-- is it first byte
 	if #msg == 0 then
@@ -189,7 +298,7 @@ function get_byte(data)
 end
 
 
-f = io.open("samples/2/ht3.bin", "rb")
+f = io.open("ht3.bin", "rb")
 while true do
 	local byte = f:read(1)
 	if not byte then break end
